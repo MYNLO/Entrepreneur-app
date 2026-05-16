@@ -1,8 +1,0 @@
-[phases]
-setup = { pkgs = ["nodejs_22", "npm"] }
-
-[build]
-cmds = ["npm ci", "npm run build"]
-
-[start]
-cmd = "node build"
