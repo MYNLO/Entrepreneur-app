@@ -1,48 +1,42 @@
+import { writable } from 'svelte/store';
 import localforage from 'localforage';
-import { pb } from '$lib/pb/client';
 
-const queueStore = localforage.createInstance({
-  name: 'msg_queue',
-  storeName: 'offline_messages'
-});
+export const offlineQueue = writable<any[]>([]);
 
-const QUEUE_KEY = 'messages';
-
-export async function queueMessage(data: { channelId: string; content: string }) {
-  const queue = (await queueStore.getItem(QUEUE_KEY)) || [];
-  const item = { ...data, timestamp: Date.now() };
-  queue.push(item);
-  await queueStore.setItem(QUEUE_KEY, queue);
-  return true;
+export async function createOfflineMessage(record: any, collection: string = 'messages') {
+	const queue: any[] = (await localforage.getItem('offlineMessages')) || [];
+	queue.push({ collection, record, timestamp: new Date().toISOString() });
+	await localforage.setItem('offlineMessages', queue);
+	offlineQueue.set(queue);
 }
 
-export async function syncQueue() {
-  const queue = (await queueStore.getItem(QUEUE_KEY)) || [];
-  if (queue.length === 0) return 0;
+export async function processOfflineQueue(pb: any) {
+	const queue: any[] = (await localforage.getItem('offlineMessages')) || [];
+	if (queue.length === 0) return;
 
-  const remaining = [];
-  let synced = 0;
+	for (let i = queue.length - 1; i >= 0; i--) {
+		const item = queue[i];
+		try {
+			await pb.collection(item.collection).create(item.record);
+			queue.splice(i, 1);
+		} catch (err) {
+			console.error(`Failed to send offline message to ${item.collection}`, err);
+		}
+	}
 
-  for (const item of queue) {
-    try {
-      await pb.collection('messages').create({
-        channel: item.channelId,
-        content: item.content
-      });
-      synced++;
-    } catch (err) {
-      remaining.push(item);
-    }
-  }
-
-  await queueStore.setItem(QUEUE_KEY, remaining);
-  return synced;
+	await localforage.setItem('offlineMessages', queue);
+	offlineQueue.set(queue);
 }
 
-export function setupOfflineSync() {
-  window.addEventListener('online', () => {
-    syncQueue().then(count => {
-      if (count > 0) console.log(`✅ Synced ${count} queued messages`);
-    });
-  });
+export function setupOfflineSync(pb: any) {
+	if (typeof window === 'undefined') return;
+
+	const handleOnline = () => processOfflineQueue(pb);
+	window.addEventListener('online', handleOnline);
+
+	if (navigator.onLine) {
+		processOfflineQueue(pb);
+	}
+
+	return () => window.removeEventListener('online', handleOnline);
 }

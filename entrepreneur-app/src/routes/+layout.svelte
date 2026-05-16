@@ -1,23 +1,22 @@
 <script lang="ts">
-  import { authUser, isSubActive } from '$lib/stores/auth';
-  import SubscriptionLockModal from '$lib/components/SubscriptionLockModal.svelte';
-  import { onMount } from 'svelte';
+	import { onMount } from 'svelte';
+	import { pb } from '$lib/pb/client';
+	import { setupOfflineSync } from '$lib/stores/queue';
+	import { authUser } from '$lib/stores/auth';
 
-  let showLock = false;
+	onMount(() => {
+		// Common auth setup so the rest of your app continues to work like before
+		if (pb.authStore.isValid) {
+			authUser.set(pb.authStore.model);
+		}
 
-  onMount(() => {
-    const checkSub = () => {
-      if ($authUser && !$isSubActive) {
-        showLock = true;
-      }
-    };
-    checkSub();
-    const interval = setInterval(checkSub, 300000); // 5 min heartbeat
-    return () => clearInterval(interval);
-  });
+		pb.authStore.onChange((token, model) => {
+			authUser.set(model);
+		});
+
+		// Setup offline sync when the app loads
+		setupOfflineSync(pb);
+	});
 </script>
 
-<div class="min-h-screen flex flex-col">
-  <slot />
-  <SubscriptionLockModal bind:isOpen={showLock} />
-</div>
+<slot />

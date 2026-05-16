@@ -1,5 +1,3 @@
-import type { LayoutServerLoad } from './$types';
-
-export const load: LayoutServerLoad = async ({ locals }) => {
-  return { session: locals.pb?.authStore?.exportToCookie() || null };
+export const load = async () => {
+	return {};
 };
